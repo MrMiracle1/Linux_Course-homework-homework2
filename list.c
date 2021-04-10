@@ -229,7 +229,7 @@ static  void list_main(const char *name){
 int main(int argc,char **argv){
     elf_name=argv[0];
     int c=0;
-    while((c=getopt(argc,argv,"ral:h:m:"))!=-1){
+    while((c=my_getopt(argc,argv,"ral:h:m:"))!=-1){
         switch(c) {
             case 'r':
                 recursive_flag=1;
