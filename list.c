@@ -90,11 +90,10 @@ static void list_node(const char *path,const char *file_name){ //查询一个文
     strcpy(&node_name[name_size+1],file_name);
     node_name[name_size+1+entry_size]=0; //nodename:path/file_name\0
     
-    
     //获取stat，若无法读取，抛出无法访问的错误
     struct stat status;
     if(stat(node_name,&status)){
-        fprintf(stderr,"%s can't access \"%s\": %s\n",instr_name,node_name,strerror(errno));
+        fprintf(stderr,"%s can't access \"%s\": %s 888\n",instr_name,node_name,strerror(errno));
         return;
     }
 
@@ -153,10 +152,14 @@ S_IXOTH 00001             其他用户具可执行权限
 
     //筛选符合条件的文件
     int filter_flag=(!modify_time||time(NULL)-stat_mtime<=modify_time)&&(!down_size||stat_size>=down_size)&&(!up_size||stat_size<=up_size);//过滤修改时间与文件大小
-    if((filter_flag&&!S_ISDIR(stat_mode))||(S_ISDIR(stat_mode)&&recursive_flag)){//过滤目录于不满足参数条件的文件（递归条件下不过滤目录）
+ //   if((filter_flag&&!S_ISDIR(stat_mode))||(S_ISDIR(stat_mode)&&recursive_flag)){//过滤目录于不满足参数条件的文件（递归条件下不过滤目录）
+    if(filter_flag){
         char stat_time_str[64];
         strftime(stat_time_str,64,"%Y-%m-%d %H:%M",localtime(&stat_mtime));
-        printf("%s %8ld %s %s\n",permission,stat_size,stat_time_str,file_name);
+        if(recursive_flag)
+        	printf("%s %8ld %s %s\n",permission,stat_size,stat_time_str,node_name);
+        else
+        	printf("%s %8ld %s %s\n",permission,stat_size,stat_time_str,file_name);
     }
 
     //判断文件不为.或..
@@ -180,7 +183,7 @@ S_IXOTH 00001             其他用户具可执行权限
 
 static void list_dir(const char *name){
     if(!init){
-        printf("\n");
+//        printf("\n");
     }
     init=0;
     DIR *dir=opendir(name);
@@ -189,7 +192,7 @@ static void list_dir(const char *name){
         return;
     }
 
-    printf("%s:\n",name);
+//    printf("%s:\n",name);
 
     struct dirent *entry;
     int count=0;
@@ -200,7 +203,7 @@ static void list_dir(const char *name){
         list_node(name,entry_name);
         count++;
     }
-    printf("%d files in total.\n",count);
+//    printf("%d files.\n",count);
 
 }
 
@@ -210,6 +213,7 @@ static  void list_main(const char *name){
         fprintf(stderr,"%s can't access dir \"%s\": %s\n",instr_name,name,strerror(errno));
         return;
     }
+
     if(S_ISDIR(status.st_mode)){//是目录就加入待遍历列表
         list_start=malloc(sizeof(list_node_t));
         list_start->node=name;
@@ -221,7 +225,7 @@ static  void list_main(const char *name){
         }
     }
     else{//是文件，直接打印信息
-        list_node("",name);
+        list_node(".",name);
     }
 
 }
@@ -250,8 +254,10 @@ int main(int argc,char **argv){
                 break;
         }
     }
-    if(optind=argc)//0处理对象
+    if(optind==argc)//0处理对象
+    {
         list_main(".");
+    }
     else
     {
         for(int i=optind;i<argc;i++){
