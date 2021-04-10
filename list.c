@@ -12,15 +12,15 @@
 #include<sys/types.h>
 #include<sys/stat.h>
 
-static const char *elf_name;
+static const char *instr_name;
 static int recursive_flag;
 static int all_flag;
-static off_t lo_size;
-static off_t hi_size;
+static off_t down_size;
+static off_t up_size;
 static time_t modify_time;
 static int init=1;
 
-
+//用于记录路径的链表节点
 typedef struct inode{
     const char *node;
     struct inode *next;
@@ -77,24 +77,24 @@ struct stat {
  struct timespec st_ctime;  change时间 
 };*/
 
-static void list_node(const char *prefix,const char *file_name){ //查询一个文件的信息
+static void list_node(const char *path,const char *file_name){ //查询一个文件的信息
    
    
     //前缀路径的处理
-    size_t name_size=strlen(prefix);
+    size_t name_size=strlen(path);
     size_t entry_size=strlen(file_name);
     char *node_name=malloc(name_size+entry_size+2);
 
-    strcpy(node_name,prefix);
+    strcpy(node_name,path);
     node_name[name_size]='/';
     strcpy(&node_name[name_size+1],file_name);
-    node_name[name_size+1+entry_size]=0; //nodename:prefix/file_name\0
+    node_name[name_size+1+entry_size]=0; //nodename:path/file_name\0
     
     
     //获取stat，若无法读取，抛出无法访问的错误
     struct stat status;
     if(stat(node_name,&status)){
-        fprintf(stderr,"%s can't access \"%s\": %s\n",elf_name,node_name,strerror(errno));
+        fprintf(stderr,"%s can't access \"%s\": %s\n",instr_name,node_name,strerror(errno));
         return;
     }
 
@@ -105,8 +105,8 @@ static void list_node(const char *prefix,const char *file_name){ //查询一个�
     time_t stat_mtime=status.st_mtime;
 
     //格式化权限字符串
-    char mode_text[]={'-','-','-','-','-','-','-','-','-','-','\0'};
-    mode_text[0]=get_type(stat_mode);
+    char permission[]={'-','-','-','-','-','-','-','-','-','-','\0'};
+    permission[0]=get_type(stat_mode);
 
 /*
 stat_mode中对于权限的定义
@@ -124,39 +124,39 @@ S_IXOTH 00001             其他用户具可执行权限
 */
 
     if(stat_mode & S_IRUSR){
-        mode_text[1]='r';
+        permission[1]='r';
     }
     if(stat_mode & S_IWUSR){
-        mode_text[1]='w';
+        permission[1]='w';
     }
     if(stat_mode & S_IXUSR){
-        mode_text[1]='x';
+        permission[1]='x';
     }
     if(stat_mode & S_IRGRP){
-        mode_text[1]='r';
+        permission[1]='r';
     }
     if(stat_mode & S_IWGRP){
-        mode_text[1]='w';
+        permission[1]='w';
     }
     if(stat_mode & S_IXGRP){
-        mode_text[1]='x';
+        permission[1]='x';
     }
     if(stat_mode & S_IROTH){
-        mode_text[1]='r';
+        permission[1]='r';
     }
     if(stat_mode & S_IWOTH){
-        mode_text[1]='w';
+        permission[1]='w';
     }
     if(stat_mode & S_IXOTH){
-        mode_text[1]='x';
+        permission[1]='x';
     }
 
     //筛选符合条件的文件
-    int filter_flag=(!modify_time||time(NULL)-stat_mtime<=modify_time)&&(!lo_size||stat_size>=lo_size)&&(!hi_size||stat_size<=hi_size);//过滤修改时间与文件大小
+    int filter_flag=(!modify_time||time(NULL)-stat_mtime<=modify_time)&&(!down_size||stat_size>=down_size)&&(!up_size||stat_size<=up_size);//过滤修改时间与文件大小
     if((filter_flag&&!S_ISDIR(stat_mode))||(S_ISDIR(stat_mode)&&recursive_flag)){//过滤目录于不满足参数条件的文件（递归条件下不过滤目录）
         char stat_time_str[64];
         strftime(stat_time_str,64,"%Y-%m-%d %H:%M",localtime(&stat_mtime));
-        printf("%s %8ld %s %s\n",mode_text,stat_size,stat_time_str,file_name);
+        printf("%s %8ld %s %s\n",permission,stat_size,stat_time_str,file_name);
     }
 
     //判断文件不为.或..
@@ -185,7 +185,7 @@ static void list_dir(const char *name){
     init=0;
     DIR *dir=opendir(name);
     if(dir==NULL){
-        fprintf(stderr,"%s can't access dir \"%s\": %s\n",elf_name,name,strerror(errno));
+        fprintf(stderr,"%s can't access dir \"%s\": %s\n",instr_name,name,strerror(errno));
         return;
     }
 
@@ -207,10 +207,10 @@ static void list_dir(const char *name){
 static  void list_main(const char *name){
     struct stat status;
     if(stat(name,&status)){
-        fprintf(stderr,"%s can't access dir \"%s\": %s\n",elf_name,name,strerror(errno));
+        fprintf(stderr,"%s can't access dir \"%s\": %s\n",instr_name,name,strerror(errno));
         return;
     }
-    if(S_ISDIR(status.st_mode)){
+    if(S_ISDIR(status.st_mode)){//是目录就加入待遍历列表
         list_start=malloc(sizeof(list_node_t));
         list_start->node=name;
         list_start->next=NULL;
@@ -220,14 +220,14 @@ static  void list_main(const char *name){
             list_start=list_start->next;
         }
     }
-    else{
+    else{//是文件，直接打印信息
         list_node("",name);
     }
 
 }
 
 int main(int argc,char **argv){
-    elf_name=argv[0];
+    instr_name=argv[0];
     int c=0;
     while((c=my_getopt(argc,argv,"ral:h:m:"))!=-1){
         switch(c) {
@@ -238,10 +238,10 @@ int main(int argc,char **argv){
                 all_flag=1;
                 break;
             case 'l':
-                lo_size=atoi(optarg);
+                down_size=atoi(optarg);
                 break;
             case 'h':
-                hi_size=atoi(optarg);
+                up_size=atoi(optarg);
                 break;
             case 'm':
                 modify_time=atoi(optarg)*24*60*60;
@@ -250,8 +250,13 @@ int main(int argc,char **argv){
                 break;
         }
     }
-    for(int i=optind;i<argc;i++){
+    if(optind=argc)//0处理对象
+        list_main(".");
+    else
+    {
+        for(int i=optind;i<argc;i++){
         list_main(argv[i]);
+        }
     }
     return 0;
 }

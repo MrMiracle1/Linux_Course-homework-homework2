@@ -9,10 +9,6 @@
 extern "C"{
 #endif
 
-#define no_argument 1
-#define required_argument 2
-#define optional_argument 3
-
 extern char* optarg; //当前选项参数字符串
 extern int optind; //argv的当前索引值
 
